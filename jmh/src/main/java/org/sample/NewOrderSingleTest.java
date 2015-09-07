@@ -36,6 +36,7 @@ import domain.objects.ExecutionReportMessage;
 import domain.objects.NewOrderSingleMessage;
 import domain.objects.OrderCancelRequestMessage;
 import net.openhft.chronicle.bytes.Bytes;
+import net.openhft.chronicle.bytes.util.StringInternerBytes;
 import net.openhft.chronicle.core.Jvm;
 import net.openhft.chronicle.network.TCPRegistry;
 import org.junit.Assert;
@@ -50,7 +51,9 @@ import org.openjdk.jmh.runner.options.Options;
 import org.openjdk.jmh.runner.options.OptionsBuilder;
 import org.openjdk.jmh.runner.options.TimeValue;
 import software.chronicle.FixServer;
+import software.chronicle.message.types.NewOrderSingle;
 import software.chronicle.parsers.FixMessageParser;
+import software.chronicle.parsers.NewOrderSingleParser;
 
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
@@ -65,15 +68,22 @@ import java.util.concurrent.TimeUnit;
 
 
 @State(Scope.Thread)
-public class ChanelHubTest {
+public class NewOrderSingleTest {
 
     public static final String HOSTPORT = "host.port";
+    final NewOrderSingleParser parser = new NewOrderSingleParser(new StringInternerBytes(1024));
+    final NewOrderSingle newOrderSingleMessage = new NewOrderSingleMessage();
+
+    final Bytes gmBytes = Bytes.from(("8=FIX.4" +
+            ".2|9=192|35=D|49=CLIENT|56=GSITEST|52=20110315-16:13:31.635|34=460|40=2|" +
+            "54=1|55=LCOM1|11=1131/2011-03-15-04:13|21=3|60=20110315-16:13:31|38=1|44=200.0|59=0|" +
+            "200=201106|167=FUT|22=5|48=LCOM1|1=ABCTEST1|10=063|").replace('|', '\u0001'));
 
     public static void main(String[] args) throws RunnerException, InvocationTargetException, IllegalAccessException, IOException {
         if (Jvm.isDebug()) {
-            ChanelHubTest main = new ChanelHubTest();
+            NewOrderSingleTest main = new NewOrderSingleTest();
 
-            for (Method m : ChanelHubTest.class.getMethods()) {
+            for (Method m : NewOrderSingleTest.class.getMethods()) {
                 if (m.getAnnotation(Benchmark.class) != null) {
                     m.invoke(main);
                 }
@@ -83,7 +93,7 @@ public class ChanelHubTest {
             int time = Boolean.getBoolean("longTest") ? 30 : 2;
             System.out.println("measurementTime: " + time + " secs");
             Options opt = new OptionsBuilder()
-                    .include(ChanelHubTest.class.getSimpleName())
+                    .include(NewOrderSingleTest.class.getSimpleName())
                     .warmupIterations(5)
 //                .measurementIterations(5)
                     .forks(1)
@@ -96,15 +106,27 @@ public class ChanelHubTest {
         }
     }
 
+    @Benchmark
+    public boolean test() {
+        gmBytes.readPosition(0);
+        gmBytes.readLimit(gmBytes.writePosition());
+
+        final FixMessageParser fixMessageParser = new FixMessageParser(
+                () -> newOrderSingleMessage,
+                () -> null,
+                () -> null,
+                () -> null,
+                () -> null,
+                () -> null,
+                () -> null);
+
+        return fixMessageParser.parse(gmBytes, null, 0);
+
+    }
+
+
     @Test
     public void testNewOrderSingle() throws IOException, InterruptedException, ParseException {
-        //Supplier<NewOrderSingle>
-        final Bytes gmBytes = Bytes.from(("8=FIX.4" +
-                ".2|9=192|35=D|49=CLIENT|56=GSITEST|52=20110315-16:13:31.635|34=460|40=2|" +
-                "54=1|55=LCOM1|11=1131/2011-03-15-04:13|21=3|60=20110315-16:13:31|38=1|44=200.0|59=0|" +
-                "200=201106|167=FUT|22=5|48=LCOM1|1=ABCTEST1|10=063|").replace('|', '\u0001'));
-
-
         TCPRegistry.createServerSocketChannelFor(HOSTPORT);
         CountDownLatch latch = new CountDownLatch(1);
         NewOrderSingleMessage actual = new NewOrderSingleMessage(latch);
