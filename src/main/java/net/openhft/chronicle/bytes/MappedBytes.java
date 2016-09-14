@@ -149,12 +149,31 @@ public class MappedBytes extends AbstractBytes<Void> implements Closeable {
     }
 
     private void acquireNextByteStore(long offset) {
-        try {
-            BytesStore newBS = mappedFile.acquireByteStore(offset);
-            BytesStore oldBS = bytesStore;
-            bytesStore = newBS;
-            oldBS.release();
+        if (bytesStore.inside(offset)) {
+            System.out.println(Thread.currentThread().getName() + " went to acquire but offset was inside store!");
+            return;
+        }
 
+        BytesStore oldBS = bytesStore;
+        try {
+            try {
+                oldBS.release();
+            } catch (IllegalStateException e) {
+                System.out.println(Thread.currentThread().getName() +"Failed to release oldBS.");
+                e.printStackTrace();
+                System.out.println(Thread.currentThread().getName() +"oldBS refCount: " + oldBS.refCount());
+                System.out.println(Thread.currentThread().getName() +"bytesStore refCount: " + bytesStore.refCount());
+
+                if (bytesStore.inside(offset)) {
+                    System.out.println(Thread.currentThread().getName() +"We are inside offset now, and we never replaced the bytesStore!! Acquiring anyway...");
+                } else {
+                    System.out.println(Thread.currentThread().getName() + "We are not inside the byteStore!! Trying to acquire...");
+                }
+
+                bytesStore = (BytesStore) mappedFile.acquireByteStore(offset);
+                return;
+            }
+            bytesStore = (BytesStore) mappedFile.acquireByteStore(offset);
         } catch (IOException | IllegalStateException | IllegalArgumentException e) {
             BufferOverflowException boe = new BufferOverflowException();
             boe.initCause(e);

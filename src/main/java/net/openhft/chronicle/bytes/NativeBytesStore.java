@@ -327,7 +327,14 @@ public class NativeBytesStore<Underlying>
     @Override
     @ForceInline
     public long readVolatileLong(long offset) {
-        return memory.readVolatileLong(address + translate(offset));
+        try {
+            return memory.readVolatileLong(address + translate(offset));
+        } catch (NullPointerException npe) {
+            LOGGER.error("Caught NPE while reading volatileLong", npe);
+            LOGGER.error("memory: " + memory);
+            LOGGER.error("releasedHere: ", releasedHere);
+            throw npe;
+        }
     }
 
     @NotNull
@@ -484,8 +491,10 @@ public class NativeBytesStore<Underlying>
         if (refCount.get() > 0) {
             LOGGER.info("NativeBytesStore discarded without releasing ", createdHere);
         }
-        if (releasedHere == null)
+        if (releasedHere == null) {
             releasedHere = new Error();
+            releasedHere.fillInStackTrace();
+        }
         if (cleaner != null)
             cleaner.clean();
     }
